@@ -17,6 +17,35 @@ mongoose.connect(process.env.MONGODB_URI).then(()=> {
 app.get('/health', (req, res) => {
     res.json({ status: 'ok' });
 });
+app.post('/api/add', async (req, res) => {
+    try {
+        const { id, first_name, last_name, birthday } = req.body;
+
+        // בדיקה בסיסית
+        if (!id || !first_name || !last_name || !birthday) {
+            return res.status(400).json({
+                id: 400,
+                message: 'Missing required fields'
+            });
+        }
+
+        const user = await User.create({
+            id,
+            first_name,
+            last_name,
+            birthday
+        });
+
+        res.json(user);
+
+    } catch (err) {
+        res.status(500).json({
+            id: 1,
+            message: err.message
+        });
+    }
+});
+
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
@@ -24,24 +53,4 @@ app.listen(PORT, () => {
 
 });
 
-/* זה בדיקה של הופעת הdb במסך בעמוד שלנו -http://localhost:3000/test-user
-בפועל זה צריך להיות עם post במקום get , לשים לב שנצטרך למחוק את השורה הזאתי מאוחר יותר.
-זה רק לצורך בדיקה , אצלינו זה יהיה דרך /api/users
-app.get('/test-user', async (req, res) => {
-    try {
-        const existing = await User.findOne({id :123123})
-        if (existing) {
-            return res.json({note: 'already exists', user: existing});
-        }
-        const user = await User.create({
-            id: 123123,
-            first_name: 'mosh',
-            last_name: 'israeli',
-            birthday: new Date('1999-01-01')
-        });
-        res.json(user);
-    } catch (err) {
-        res.status(500).json({ id: 1, message: err.message });
-    }
-});
- */
+

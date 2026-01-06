@@ -12,9 +12,19 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "axios": "^1.13.2",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
     "mongoose": "^9.0.2",
-    "pino": "^10.1.0"
-  }
+    "pino": "^10.1.0",
+    "pino-http": "^11.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nikolWE/costManager.git"
+  },
+  "bugs": {
+    "url": "https://github.com/nikolWE/costManager/issues"
+  },
+  "homepage": "https://github.com/nikolWE/costManager#readme"
 }

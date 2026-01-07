@@ -87,7 +87,7 @@ app.post('/api/add', async (req, res) => {
 /* ---------- REPORT ---------- */
 app.get('/api/report', async (req, res) => {
     try {
-        const userid = Number(req.query.userid);
+        const userid = Number(req.query.userid ?? req.query.id);
         const year = Number(req.query.year);
         const month = Number(req.query.month);
 
@@ -171,19 +171,20 @@ app.get('/api/report', async (req, res) => {
 
 app.get('/api/total', async (req, res) => {
     try {
-        const userid = Number(req.query.userid);
+        const userid = Number(req.query.userid ?? req.query.id);
 
         if (Number.isNaN(userid)) {
             return res.status(400).json({ id: 400, message: 'Invalid userid' });
         }
 
         const result = await Cost.aggregate([
-            { $match: { userid: userid } },
+            { $match: { userid } },
             { $group: { _id: null, total: { $sum: '$sum' } } }
         ]);
 
         const total = result.length ? result[0].total : 0;
 
+        // מחזירים userid (כמו שאתה מצפה), ועדיין משאירים total ברור
         return res.json({ userid, total });
     } catch (err) {
         return res.status(500).json({ id: 2, message: err.message });

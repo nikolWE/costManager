@@ -128,7 +128,7 @@ app.get('/api/users/:id', async (req, res) => {
 
         // Ask costs-service for total (helper endpoint in costs-service)
         const totalResponse = await axios.get(process.env.COSTS_URL + '/api/total', {
-            params: { id: userId }
+            params: { userid: userId }
         });
 
         const total = Number(totalResponse.data && totalResponse.data.total) || 0;

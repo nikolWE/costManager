@@ -15,11 +15,10 @@ const costSchema = new mongoose.Schema({
         required: true
     },
     sum: {
-        type: Number,
+        type: Number, //although it says in the instructions that we need to use Double, Javascript numbers are always double (64-bit floating point).
         required: true
     },
 
-    // ✅ זה החלק הקריטי
     createdAt: {
         type: Date,
         default: Date.now

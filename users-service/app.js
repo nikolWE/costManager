@@ -56,12 +56,20 @@ app.post('/api/add', async (req, res) => {
                 message: 'Missing required fields'
             });
         }
+        const birthDate = new Date(birthday + 'T12:00:00');
 
+        if (Number.isNaN(birthDate.getTime())) {
+            await writeLog('POST', '/api/add', 400);
+            return res.status(400).json({
+                id: 400,
+                message: 'Invalid birthday format. Use YYYY-MM-DD'
+            });
+        }
         const user = await User.create({
             id: Number(id),
             first_name,
             last_name,
-            birthday: new Date(birthday)
+            birthday: birthDate
         });
 
         await writeLog('POST', '/api/add', 201);

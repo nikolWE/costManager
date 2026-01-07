@@ -87,11 +87,11 @@ app.post('/api/add', async (req, res) => {
 /* ---------- REPORT ---------- */
 app.get('/api/report', async (req, res) => {
     try {
-        const id = Number(req.query.id);
+        const userid = Number(req.query.userid);
         const year = Number(req.query.year);
         const month = Number(req.query.month);
 
-        if (Number.isNaN(id) || Number.isNaN(year) || Number.isNaN(month)) {
+        if (Number.isNaN(userid) || Number.isNaN(year) || Number.isNaN(month)) {
             return res.status(400).json({
                 id: 400,
                 message: 'id, year, month are required and must be numbers'
@@ -107,7 +107,7 @@ app.get('/api/report', async (req, res) => {
 
         // אם זה בעבר - מנסים להביא מה-cache
         if (isPast) {
-            const cached = await Report.findOne({ userid: id, year, month }).lean();
+            const cached = await Report.findOne({ userid: userid, year, month }).lean();
             if (cached) {
                 return res.json({
                     userid: cached.userid,
@@ -123,7 +123,7 @@ app.get('/api/report', async (req, res) => {
         const end = new Date(year, month, 1);
 
         const costsDocs = await Cost.find({
-            userid: id,
+            userid: userid,
             createdAt: { $gte: start, $lt: end }
         }).lean();
 
@@ -147,7 +147,7 @@ app.get('/api/report', async (req, res) => {
         const costsArr = categories.map(cat => ({ [cat]: grouped[cat] }));
 
         const reportJson = {
-            userid: id,
+            userid,
             year,
             month,
             costs: costsArr
@@ -156,7 +156,7 @@ app.get('/api/report', async (req, res) => {
         // אם זה בעבר - שומרים cache
         if (isPast) {
             await Report.updateOne(
-                { userid: id, year, month },
+                { userid, year, month },
                 { $set: { costs: costsArr } },
                 { upsert: true }
             );
@@ -171,20 +171,20 @@ app.get('/api/report', async (req, res) => {
 
 app.get('/api/total', async (req, res) => {
     try {
-        const id = Number(req.query.id);
+        const userid = Number(req.query.id);
 
-        if (Number.isNaN(id)) {
-            return res.status(400).json({ id: 400, message: 'Invalid id' });
+        if (Number.isNaN(userid)) {
+            return res.status(400).json({ id: 400, message: 'Invalid userid' });
         }
 
         const result = await Cost.aggregate([
-            { $match: { userid: id } },
+            { $match: { userid: userid } },
             { $group: { _id: null, total: { $sum: '$sum' } } }
         ]);
 
         const total = result.length ? result[0].total : 0;
 
-        return res.json({ id, total });
+        return res.json({ userid, total });
     } catch (err) {
         return res.status(500).json({ id: 2, message: err.message });
     }

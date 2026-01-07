@@ -171,7 +171,7 @@ app.get('/api/report', async (req, res) => {
 
 app.get('/api/total', async (req, res) => {
     try {
-        const userid = Number(req.query.id);
+        const userid = Number(req.query.userid);
 
         if (Number.isNaN(userid)) {
             return res.status(400).json({ id: 400, message: 'Invalid userid' });

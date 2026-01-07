@@ -2,36 +2,11 @@ require('dotenv').config();
 
 const express = require('express');
 const mongoose = require('mongoose');
-const Log = require('../models/Log');
+
+const Log = require('./models/Log');
 
 const app = express();
 app.use(express.json());
-
-const pinoHttp = require('pino-http');
-const { saveLog } = require('./logger');
-
-app.use(
-    pinoHttp({
-        customLogLevel: () => 'info',
-        customSuccessMessage: req => `${req.method} ${req.url}`,
-        customErrorMessage: req => `error on ${req.method} ${req.url}`,
-        hooks: {
-            logMethod(inputArgs, method) {
-                const req = inputArgs[0];
-                const res = inputArgs[1];
-
-                saveLog({
-                    method: req.method,
-                    endpoint: req.url,
-                    status: res.statusCode,
-                    message: 'http request'
-                }).catch(() => {});
-
-                method.apply(this, inputArgs);
-            }
-        }
-    })
-);
 
 /* =========================
    MongoDB connection
@@ -54,29 +29,37 @@ app.get('/health', (req, res) => {
 
 /* =========================
    GET /api/logs
-   List of all logs
+   List all logs
 ========================= */
 app.get('/api/logs', async (req, res) => {
     try {
-        const logs = await Log.find();
+        const logs = await Log.find().lean();
         res.json(logs);
     } catch (err) {
         res.status(500).json({
-            error: err.message
+            id: 2,
+            message: err.message
         });
     }
 });
 
 /* =========================
-   (Optional) POST /api/logs
-   Add a log manually
-   Useful for tests
+   POST /api/logs
+   Add a log (from other services)
 ========================= */
 app.post('/api/logs', async (req, res) => {
     try {
-        const { method, endpoint, status, message } = req.body;
+        const { service, method, endpoint, status, message } = req.body;
+
+        if (!method || !endpoint || !status) {
+            return res.status(400).json({
+                id: 400,
+                message: 'Missing required log fields'
+            });
+        }
 
         const log = await Log.create({
+            service,
             method,
             endpoint,
             status,
@@ -84,10 +67,11 @@ app.post('/api/logs', async (req, res) => {
             timestamp: new Date()
         });
 
-        res.json(log);
+        res.status(201).json(log);
     } catch (err) {
         res.status(500).json({
-            error: err.message
+            id: 1,
+            message: err.message
         });
     }
 });
@@ -100,5 +84,3 @@ const PORT = process.env.PORT || 3002;
 app.listen(PORT, () => {
     console.log(`Logs service running on port ${PORT}`);
 });
-
-console.log('logs-service started');

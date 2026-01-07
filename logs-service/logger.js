@@ -1,5 +1,5 @@
 const pino = require('pino');
-const Log = require('../models/Log');
+const Log = require('./models/Log');
 
 /* ---------- PINO LOGGER ---------- */
 const logger = pino({

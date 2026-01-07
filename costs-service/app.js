@@ -7,7 +7,8 @@ const axios = require('axios');
 const pino = require('pino');
 const pinoHttp = require('pino-http');
 
-const Cost = require('../models/Cost');
+const Cost = require('./models/Cost');
+const Report = require('./models/Report');
 
 const app = express();
 app.use(express.json());
@@ -53,14 +54,17 @@ app.get('/health', (req, res) => {
 /* ---------- ADD COST ---------- */
 app.post('/api/add', async (req, res) => {
     try {
-        const { userid, sum, category, description, day, month, year } = req.body;
+        const userid = Number(req.body.userid);
+        const sum = Number(req.body.sum);
+        const category = req.body.category;
+        const description = req.body.description;
 
-        if (!userid || !sum || !category || !description || !day || !month || !year) {
+        // optional date-time (אם יחליטו לשלוח). אם לא — משתמשים בזמן קבלת הבקשה
+        const createdAt = req.body.createdAt ? new Date(req.body.createdAt) : new Date();
+
+        if (Number.isNaN(userid) || Number.isNaN(sum) || !category || !description) {
             await writeLog('POST', '/api/add', 400);
-            return res.status(400).json({
-                id: 400,
-                message: 'Missing required fields'
-            });
+            return res.status(400).json({ id: 400, message: 'Missing required fields' });
         }
 
         const cost = await Cost.create({
@@ -68,89 +72,124 @@ app.post('/api/add', async (req, res) => {
             sum,
             category,
             description,
-            day,
-            month,
-            year
+            createdAt
         });
 
-        await writeLog('POST', '/api/add', 200);
-        res.json(cost);
-
+        await writeLog('POST', '/api/add', 201);
+        return res.status(201).json(cost);
     } catch (err) {
         await writeLog('POST', '/api/add', 500);
-        res.status(500).json({
-            id: 1,
-            message: err.message
-        });
+        return res.status(500).json({ id: 1, message: err.message });
     }
 });
+
 
 /* ---------- REPORT ---------- */
 app.get('/api/report', async (req, res) => {
     try {
-        const { userid, month, year } = req.query;
+        const id = Number(req.query.id);
+        const year = Number(req.query.year);
+        const month = Number(req.query.month);
 
-        if (!userid || !month || !year) {
-            await writeLog('GET', '/api/report', 400);
+        if (Number.isNaN(id) || Number.isNaN(year) || Number.isNaN(month)) {
             return res.status(400).json({
                 id: 400,
-                message: 'Missing query parameters'
+                message: 'id, year, month are required and must be numbers'
             });
         }
 
-        const FIXED_CATEGORIES = [
-            'food',
-            'education',
-            'health',
-            'housing',
-            'sports'
-        ];
+        // האם החודש המבוקש הוא בעבר?
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth() + 1;
 
-        const costs = await Cost.find({
-            userid: Number(userid),
-            month: Number(month),
-            year: Number(year)
-        });
+        const isPast = (year < currentYear) || (year === currentYear && month < currentMonth);
 
-        const dynamicCategories = [...new Set(costs.map(c => c.category))];
+        // אם זה בעבר - מנסים להביא מה-cache
+        if (isPast) {
+            const cached = await Report.findOne({ userid: id, year, month }).lean();
+            if (cached) {
+                return res.json({
+                    userid: cached.userid,
+                    year: cached.year,
+                    month: cached.month,
+                    costs: cached.costs
+                });
+            }
+        }
 
-        const ALL_CATEGORIES = [
-            ...FIXED_CATEGORIES,
-            ...dynamicCategories.filter(c => !FIXED_CATEGORIES.includes(c))
-        ];
+        // מחשבים דו"ח מה-Costs
+        const start = new Date(year, month - 1, 1);
+        const end = new Date(year, month, 1);
 
+        const costsDocs = await Cost.find({
+            userid: id,
+            createdAt: { $gte: start, $lt: end }
+        }).lean();
+
+        const categories = ['food', 'health', 'housing', 'sports', 'education'];
+
+        // תמיד מחזירים את כל הקטגוריות, גם אם ריקות
         const grouped = {};
-        ALL_CATEGORIES.forEach(cat => {
-            grouped[cat] = [];
-        });
+        categories.forEach(cat => { grouped[cat] = []; });
 
-        costs.forEach(cost => {
-            grouped[cost.category].push({
-                sum: cost.sum,
-                description: cost.description,
-                day: cost.day
+        costsDocs.forEach(c => {
+            // אם יש ערך לא צפוי ב-category, לא להפיל את השרת (פשוט להתעלם או לשים בקטגוריה קיימת)
+            if (!grouped[c.category]) return;
+
+            grouped[c.category].push({
+                sum: c.sum,
+                description: c.description,
+                day: new Date(c.createdAt).getDate()
             });
         });
 
-        await writeLog('GET', '/api/report', 200);
+        const costsArr = categories.map(cat => ({ [cat]: grouped[cat] }));
 
-        res.json({
-            userid: Number(userid),
-            year: Number(year),
-            month: Number(month),
-            costs: ALL_CATEGORIES.map(cat => ({
-                [cat]: grouped[cat]
-            }))
-        });
+        const reportJson = {
+            userid: id,
+            year,
+            month,
+            costs: costsArr
+        };
 
+        // אם זה בעבר - שומרים cache
+        if (isPast) {
+            await Report.updateOne(
+                { userid: id, year, month },
+                { $set: { costs: costsArr } },
+                { upsert: true }
+            );
+        }
+
+        return res.json(reportJson);
     } catch (err) {
-        await writeLog('GET', '/api/report', 500);
-        res.status(500).json({
-            id: 1,
-            message: err.message
-        });
+        return res.status(500).json({ id: 2, message: err.message });
     }
 });
+
+
+app.get('/api/total', async (req, res) => {
+    try {
+        const id = Number(req.query.id);
+
+        if (Number.isNaN(id)) {
+            return res.status(400).json({ id: 400, message: 'Invalid id' });
+        }
+
+        const result = await Cost.aggregate([
+            { $match: { userid: id } },
+            { $group: { _id: null, total: { $sum: '$sum' } } }
+        ]);
+
+        const total = result.length ? result[0].total : 0;
+
+        return res.json({ id, total });
+    } catch (err) {
+        return res.status(500).json({ id: 2, message: err.message });
+    }
+});
+
 
 
 

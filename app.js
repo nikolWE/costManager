@@ -2,8 +2,8 @@ require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 
-const User = require('./models/User');
-const Cost = require('./models/Cost');
+const User = require('./users-service/models/User');
+const Cost = require('./costs-service/models/Cost');
 
 const app = express();
 app.use(express.json());

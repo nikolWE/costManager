@@ -1,6 +1,15 @@
 const mongoose = require('mongoose');
 
 const costSchema = new mongoose.Schema({
+    description: {
+        type: String,
+        required: true
+    },
+    category: {
+        type: String,
+        required: true,
+        enum: ['food', 'health', 'housing', 'sports', 'education']
+    },
     userid: {
         type: Number,
         required: true
@@ -9,26 +18,13 @@ const costSchema = new mongoose.Schema({
         type: Number,
         required: true
     },
-    category: {
-        type: String,
-        required: true
-    },
-    description: {
-        type: String,
-        required: true
-    },
-    day: {
-        type: Number,
-        required: true
-    },
-    month: {
-        type: Number,
-        required: true
-    },
-    year: {
-        type: Number,
-        required: true
+
+    // ✅ זה החלק הקריטי
+    createdAt: {
+        type: Date,
+        default: Date.now
     }
+
 });
 
 module.exports = mongoose.model('Cost', costSchema);

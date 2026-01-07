@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 
 const logSchema = new mongoose.Schema({
+    service: String,
     method: String,        // GET / POST
     endpoint: String,      // /api/add , /api/report וכו'
     status: Number,        // 200 / 400 / 500

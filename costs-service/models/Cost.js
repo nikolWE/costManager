@@ -7,8 +7,7 @@ const costSchema = new mongoose.Schema({
     },
     category: {
         type: String,
-        required: true,
-        enum: ['food', 'health', 'housing', 'sports', 'education']
+        required: true
     },
     userid: {
         type: Number,

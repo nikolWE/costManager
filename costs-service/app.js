@@ -111,6 +111,9 @@ app.get('/api/report', async (req, res) => {
                 message: 'id, year, month are required and must be numbers'
             });
         }
+        if (month < 1 || month > 12) {
+            return res.status(400).json({ id: 400, message: 'month must be 1-12' });
+        }
 
         // האם החודש המבוקש הוא בעבר?
         const now = new Date();
@@ -141,16 +144,27 @@ app.get('/api/report', async (req, res) => {
             createdAt: { $gte: start, $lt: end }
         }).lean();
 
-        const categories = ['food', 'health', 'housing', 'sports', 'education'];
+// קטגוריות קבועות (אם המרצה רוצה שתמיד יופיעו)
+        const FIXED_CATEGORIES = ['food', 'health', 'housing', 'sports', 'education'];
 
-        // תמיד מחזירים את כל הקטגוריות, גם אם ריקות
+// כל הקטגוריות שמופיעות בפועל בנתונים של החודש
+        const dynamicCategories = [...new Set(costsDocs.map(c => c.category))];
+
+// מאחדים: קודם הקבועות, ואז הדינמיות (בלי כפילויות)
+        const categories = [
+            ...FIXED_CATEGORIES,
+            ...dynamicCategories.filter(c => !FIXED_CATEGORIES.includes(c))
+        ];
+
+// יוצרים אובייקט ריק לכל קטגוריה
         const grouped = {};
-        categories.forEach(cat => { grouped[cat] = []; });
+        categories.forEach(cat => {
+            grouped[cat] = [];
+        });
 
+// ממלאים לפי הנתונים האמיתיים
         costsDocs.forEach(c => {
-            // אם יש ערך לא צפוי ב-category, לא להפיל את השרת (פשוט להתעלם או לשים בקטגוריה קיימת)
-            if (!grouped[c.category]) return;
-
+            if (!grouped[c.category]) grouped[c.category] = [];  // ביטחון
             grouped[c.category].push({
                 sum: c.sum,
                 description: c.description,
@@ -158,7 +172,11 @@ app.get('/api/report', async (req, res) => {
             });
         });
 
-        const costsArr = categories.map(cat => ({ [cat]: grouped[cat] }));
+// הפורמט שהמטלה דורשת
+        const costsArr = categories.map(cat => ({
+            [cat]: grouped[cat]
+        }));
+
 
         const reportJson = {
             userid,

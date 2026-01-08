@@ -59,12 +59,22 @@ app.post('/api/add', async (req, res) => {
         const category = req.body.category;
         const description = req.body.description;
 
-        // optional date-time (אם יחליטו לשלוח). אם לא — משתמשים בזמן קבלת הבקשה
-        const createdAt = req.body.createdAt ? new Date(req.body.createdAt) : new Date();
+        // אם המשתמש שלח תאריך – משתמשים בו, אחרת תאריך נוכחי של השרת
+        const createdAt = req.body.createdAt
+            ? new Date(req.body.createdAt)
+            : new Date();
 
-        if (Number.isNaN(userid) || Number.isNaN(sum) || !category || !description) {
+        if (
+            Number.isNaN(userid) ||
+            Number.isNaN(sum) ||
+            !category ||
+            !description
+        ) {
             await writeLog('POST', '/api/add', 400);
-            return res.status(400).json({ id: 400, message: 'Missing required fields' });
+            return res.status(400).json({
+                id: 400,
+                message: 'Missing required fields',
+            });
         }
 
         const cost = await Cost.create({
@@ -72,16 +82,20 @@ app.post('/api/add', async (req, res) => {
             sum,
             category,
             description,
-            createdAt
+            createdAt,
         });
 
         await writeLog('POST', '/api/add', 201);
         return res.status(201).json(cost);
     } catch (err) {
         await writeLog('POST', '/api/add', 500);
-        return res.status(500).json({ id: 1, message: err.message });
+        return res.status(500).json({
+            id: 1,
+            message: err.message,
+        });
     }
 });
+
 
 
 /* ---------- REPORT ---------- */

@@ -35,7 +35,31 @@ app.use(
         }
     })
 );
+function parseStrictDate(input) {
+    if (input == null || input === '') return { ok: false, reason: 'empty' };
+    if (typeof input !== 'string') return { ok: false, reason: 'not_string' };
 
+    const m = input.match(/^(\d{4})[-/](\d{2})[-/](\d{2})$/);
+    if (!m) return { ok: false, reason: 'bad_format' };
+
+    const year = Number(m[1]);
+    const month = Number(m[2]);
+    const day = Number(m[3]);
+
+    if (month < 1 || month > 12) return { ok: false, reason: 'month_range' };
+    if (day < 1 || day > 31) return { ok: false, reason: 'day_range' };
+
+    const d = new Date(year, month - 1, day);
+
+    const same =
+        d.getFullYear() === year &&
+        (d.getMonth() + 1) === month &&
+        d.getDate() === day;
+
+    if (!same) return { ok: false, reason: 'nonexistent_date' };
+
+    return { ok: true, date: d };
+}
 /*
  * Write log to logs-service.
  * Never fails the request if logs-service is down.
@@ -94,9 +118,22 @@ app.post('/api/add', async (req, res) => {
         /*
          * If the user sends a date we'll use it, otherwise we'll use the current date.
          */
-        const createdAt = req.body.createdAt
-            ? new Date(req.body.createdAt)
-            : new Date();
+        let createdAt = new Date();
+
+        if (req.body.createdAt != null && req.body.createdAt !== '') {
+            const parsed = parseStrictDate(req.body.createdAt);
+
+            if (!parsed.ok) {
+                await writeLog('POST', '/api/add', 400);
+                return res.status(400).json({
+                    id: 400,
+                    message: 'createdAt is invalid (YYYY-MM-DD)',
+                });
+            }
+
+            createdAt = parsed.date;
+        }
+
 
         if (
             Number.isNaN(userid) ||

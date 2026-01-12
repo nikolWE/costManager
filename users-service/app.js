@@ -28,8 +28,10 @@ app.use(express.json());
  */
 const writeLog = async (method, endpoint, status) => {
     try {
+        /* If logs-service is not configured, skip logging */
         if (!process.env.LOGS_URL) return;
 
+        /*Send log entry to logs-service*/
         await axios.post(process.env.LOGS_URL + '/api/logs', {
             service: 'users',
             method,
@@ -38,7 +40,7 @@ const writeLog = async (method, endpoint, status) => {
             timestamp: new Date()
         });
     } catch (e) {
-        // Do not crash the service if logs-service is unavailable
+        /* Do not crash the service if logs-service is unavailable */
     }
 };
 
@@ -143,19 +145,19 @@ app.get('/api/users/:id', async (req, res) => {
             await writeLog('GET', '/api/users/:id', 400);
             return res.status(400).json({ id: 400, message: 'Invalid user id' });
         }
-
+/* Fetch user from database */
         const user = await User.findOne({ id: userId }).lean();
         if (!user) {
             await writeLog('GET', '/api/users/:id', 404);
             return res.status(404).json({ id: 1, message: 'User not found' });
         }
-
+/* Validate costs-service configuration */
         if (!process.env.COSTS_URL) {
             await writeLog('GET', '/api/users/:id', 500);
             return res.status(500).json({ id: 2, message: 'COSTS_URL is not configured' });
         }
 
-        // Ask costs-service for total (helper endpoint in costs-service)
+        /* Ask costs-service for total (helper endpoint in costs-service) */
         const totalResponse = await axios.get(process.env.COSTS_URL + '/api/total', {
             params: { userid: userId }
         });
@@ -171,6 +173,7 @@ app.get('/api/users/:id', async (req, res) => {
             total: total
         });
     } catch (err) {
+        /* Handle unexpected errors: log the failure and return HTTP 500 */
         await writeLog('GET', '/api/users/:id', 500);
         return res.status(500).json({ id: 2, message: err.message });
     }

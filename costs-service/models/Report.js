@@ -1,5 +1,4 @@
 const mongoose = require('mongoose');
-
 /*
  * Report Model
  * Implements the Computed Design Pattern.
@@ -14,7 +13,6 @@ const reportSchema = new mongoose.Schema(
     },
     { timestamps: true }
 );
-
 /*
  * Unique index:
  * Ensures a single report per (userid, year, month).

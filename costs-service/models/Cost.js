@@ -33,5 +33,24 @@ const costSchema = new mongoose.Schema({
     }
 
 });
+/*
+ * Hide MongoDB internal fields (_id, __v)
+ * from JSON and object representations.
+ */
+costSchema.set('toJSON', {
+    transform: function (doc, ret) {
+        delete ret._id;
+        delete ret.__v;
+        return ret;
+    }
+});
+
+costSchema.set('toObject', {
+    transform: function (doc, ret) {
+        delete ret._id;
+        delete ret.__v;
+        return ret;
+    }
+});
 
 module.exports = mongoose.model('Cost', costSchema);

@@ -112,7 +112,8 @@ app.post('/api/add', async (req, res) => {
     try {
         const userid = Number(req.body.userid);
         const sum = Number(req.body.sum);
-        const category = req.body.category;
+        const rawCategory = req.body.category;
+        const category = (rawCategory == null) ? '' : String(rawCategory).trim().toLowerCase();
         const description = req.body.description;
 
         /*
@@ -134,9 +135,7 @@ app.post('/api/add', async (req, res) => {
             createdAt = parsed.date;
         }
 
-
-        if (
-            Number.isNaN(userid) || Number.isNaN(sum) || !category || !description)
+        if (Number.isNaN(userid) || Number.isNaN(sum) || !category || !description)
         {
             await writeLog('POST', '/api/add', 400);
             return res.status(400).json({
@@ -152,8 +151,16 @@ app.post('/api/add', async (req, res) => {
                 message: 'userid must be a number >= 1'
             });
         }
+        // Sum can't be negative
+        if (sum < 0) {
+            await writeLog('POST', '/api/add', 400);
+            return res.status(400).json({
+                id: 400,
+                message: 'sum can\'t be a negative number'
+            });
+        }
 
-// validate user exists by calling users-service
+        // validate user exists by calling users-service
         if (!process.env.USERS_URL) {
             await writeLog('POST', '/api/add', 500);
             return res.status(500).json({
@@ -182,7 +189,7 @@ app.post('/api/add', async (req, res) => {
                 message: 'Failed to validate user'
             });
         }
-
+        // Create cost
         const cost = await Cost.create({
             userid,
             sum,

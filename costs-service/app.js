@@ -176,6 +176,18 @@ app.post('/api/add', async (req, res) => {
  */
 app.get('/api/report', async (req, res) => {
     try {
+        console.log("REPORT ROUTE HIT ✅", {
+            useridRaw: req.query.userid,
+            idRaw: req.query.id,
+            yearRaw: req.query.year,
+            monthRaw: req.query.month,
+            types: {
+                userid: typeof req.query.userid,
+                id: typeof req.query.id,
+                year: typeof req.query.year,
+                month: typeof req.query.month
+            }
+        });
         const userid = Number(req.query.userid ?? req.query.id);
         const year = Number(req.query.year);
         const month = Number(req.query.month);

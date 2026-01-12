@@ -2,15 +2,21 @@ require('dotenv').config();
 
 const express = require('express');
 const mongoose = require('mongoose');
-
+/*
+ * logs-service
+ * Responsibilities:
+ * - Receive logs from other services.
+ * - Store logs in MongoDB.
+ */
 const Log = require('./models/Log');
 
 const app = express();
 app.use(express.json());
 
-/* =========================
-   MongoDB connection
-========================= */
+/*
+ * MongoDB connection.
+ * If the connection fails, the service will not start.
+ */
 mongoose
     .connect(process.env.MONGODB_URI)
     .then(() => {
@@ -20,17 +26,18 @@ mongoose
         console.error('MongoDB connection failed', err);
     });
 
-/* =========================
-   Health check
-========================= */
+/*
+ * Health check.
+ * Returns 200 OK if the service is up and running.
+ */
 app.get('/health', (req, res) => {
     res.json({ status: 'logs-service ok' });
 });
 
-/* =========================
-   GET /api/logs
-   List all logs
-========================= */
+/*
+ * GET /api/logs
+ * Returns all log entries.
+ */
 app.get('/api/logs', async (req, res) => {
     try {
         const logs = await Log.find().lean();
@@ -43,10 +50,10 @@ app.get('/api/logs', async (req, res) => {
     }
 });
 
-/* =========================
-   POST /api/logs
-   Add a log (from other services)
-========================= */
+/*
+ * POST /api/logs
+ * Stores a log entry sent by another service.
+ */
 app.post('/api/logs', async (req, res) => {
     try {
         const { service, method, endpoint, status, message } = req.body;
@@ -76,9 +83,9 @@ app.post('/api/logs', async (req, res) => {
     }
 });
 
-/* =========================
-   Server listen
-========================= */
+/*
+ * Server listen.
+ */
 const PORT = process.env.PORT || 3002;
 
 app.listen(PORT, () => {

@@ -3,6 +3,14 @@ require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const axios = require('axios');
+/*
+ * costs-service
+ * Responsibilities:
+ * - Add cost items.
+ * - Generate monthly reports.
+ * - Implement Computed Design Pattern.
+ */
+
 
 const pino = require('pino');
 const pinoHttp = require('pino-http');
@@ -13,7 +21,10 @@ const Report = require('./models/Report');
 const app = express();
 app.use(express.json());
 
-/* ---------- LOGGER (PINO) ---------- */
+/*
+ * Pino logger.
+ * Log level: info.
+ */
 const logger = pino({ level: 'info' });
 
 app.use(
@@ -25,7 +36,10 @@ app.use(
     })
 );
 
-/* ---------- LOGS SERVICE ---------- */
+/*
+ * Write log to logs-service.
+ * Never fails the request if logs-service is down.
+ */
 async function writeLog(method, endpoint, status) {
     try {
         await axios.post(process.env.LOGS_URL + '/api/logs', {
@@ -36,22 +50,40 @@ async function writeLog(method, endpoint, status) {
             timestamp: new Date()
         });
     } catch (e) {
-        // לא מפילים את השירות אם logs לא זמין
+        /*
+         *Won't crash the service if logs-service is unavailable
+         */
     }
 }
 
-/* ---------- DB ---------- */
+/*
+ * MongoDB connection.
+ * If the connection fails, the service will not start.
+ */
 mongoose
     .connect(process.env.MONGODB_URI)
     .then(() => console.log('MongoDB connected (costs-service)'))
     .catch(err => console.error('MongoDB connection error:', err));
 
-/* ---------- HEALTH ---------- */
+/*
+ * Health check.
+ * Returns 200 OK if the service is up and running.
+ */
 app.get('/health', (req, res) => {
     res.json({ status: 'costs service ok' });
 });
 
-/* ---------- ADD COST ---------- */
+/*
+ * addCost:
+ * Creates a new cost item.
+ * Required fields: userid, sum, category, description.
+ * Optional field: createdAt which defaults to the current date or if you decide you can pick your own date
+ * using the format YYYY/MM/DD.
+ * Note: the date format is YYYY-MM-DD, but the service expects YYYY/MM/DD.
+ * This is because the service is running in a container and the date format is different from the host machine,
+ * so the service needs to convert the date from YYYY-MM-DD to YYYY/MM/DD.
+ * If you want to use your own date format, you can use the createdAt field, but remember that the service expects
+ */
 app.post('/api/add', async (req, res) => {
     try {
         const userid = Number(req.body.userid);
@@ -59,7 +91,9 @@ app.post('/api/add', async (req, res) => {
         const category = req.body.category;
         const description = req.body.description;
 
-        // אם המשתמש שלח תאריך – משתמשים בו, אחרת תאריך נוכחי של השרת
+        /*
+         * If the user sends a date we'll use it, otherwise we'll use the current date.
+         */
         const createdAt = req.body.createdAt
             ? new Date(req.body.createdAt)
             : new Date();
@@ -98,7 +132,11 @@ app.post('/api/add', async (req, res) => {
 
 
 
-/* ---------- REPORT ---------- */
+/*
+ * GET /api/report
+ * Computed Design Pattern:
+ * Cached monthly reports are reused for past months.
+ */
 app.get('/api/report', async (req, res) => {
     try {
         const userid = Number(req.query.userid ?? req.query.id);
@@ -122,7 +160,9 @@ app.get('/api/report', async (req, res) => {
 
         const isPast = (year < currentYear) || (year === currentYear && month < currentMonth);
 
-        // אם זה בעבר - מנסים להביא מה-cache
+        /*
+        * if it's a past month, checks cache first.
+         */
         if (isPast) {
             const cached = await Report.findOne({ userid: userid, year, month }).lean();
             if (cached) {
@@ -144,25 +184,34 @@ app.get('/api/report', async (req, res) => {
             createdAt: { $gte: start, $lt: end }
         }).lean();
 
-// קטגוריות קבועות (אם המרצה רוצה שתמיד יופיעו)
+    /*
+    * Fixed categories according to the design document.
+    */
         const FIXED_CATEGORIES = ['food', 'health', 'housing', 'sports', 'education'];
-
-// כל הקטגוריות שמופיעות בפועל בנתונים של החודש
+        /*
+        * all the unique categories in the costsDocs.
+         */
         const dynamicCategories = [...new Set(costsDocs.map(c => c.category))];
 
-// מאחדים: קודם הקבועות, ואז הדינמיות (בלי כפילויות)
+        /*
+        * all the unique categories in the FIXED_CATEGORIES and the dynamicCategories combined.
+         */
         const categories = [
             ...FIXED_CATEGORIES,
             ...dynamicCategories.filter(c => !FIXED_CATEGORIES.includes(c))
         ];
 
-// יוצרים אובייקט ריק לכל קטגוריה
+        /*
+        * creating an empty object for each category.
+        */
         const grouped = {};
         categories.forEach(cat => {
             grouped[cat] = [];
         });
 
-// ממלאים לפי הנתונים האמיתיים
+        /*
+        * filling each category with the corresponding costs.
+         */
         costsDocs.forEach(c => {
             if (!grouped[c.category]) grouped[c.category] = [];  // ביטחון
             grouped[c.category].push({
@@ -172,7 +221,9 @@ app.get('/api/report', async (req, res) => {
             });
         });
 
-// הפורמט שהמטלה דורשת
+        /*
+         * using the prompet that the design document require.
+         */
         const costsArr = categories.map(cat => ({
             [cat]: grouped[cat]
         }));
@@ -185,7 +236,9 @@ app.get('/api/report', async (req, res) => {
             costs: costsArr
         };
 
-        // אם זה בעבר - שומרים cache
+        /*
+        * if it's a past month, saves the report to the database.'
+         */
         if (isPast) {
             await Report.updateOne(
                 { userid, year, month },
@@ -200,7 +253,11 @@ app.get('/api/report', async (req, res) => {
     }
 });
 
-
+/*
+ * GET /api/total
+ * Returns total costs for a given user.
+ * Used by users-service.
+ */
 app.get('/api/total', async (req, res) => {
     try {
         const userid = Number(req.query.userid ?? req.query.id);
@@ -227,7 +284,9 @@ app.get('/api/total', async (req, res) => {
 
 
 
-/* ---------- SERVER ---------- */
+/*
+ * Server listen.
+ */
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
     console.log(`Costs service running on port ${PORT}`);

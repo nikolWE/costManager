@@ -1,16 +1,28 @@
 require('dotenv').config();
 const express = require('express');
 const axios = require('axios');
+/*
+ * admin-service
+ * Responsibilities:
+ * - Provide developers team information.
+ */
 
 const app = express();
 app.use(express.json());
 
-// health (לא חובה אבל נוח)
+/*
+ * Health check.
+ * Returns 200 OK if the service is up and running.
+ */
 app.get('/health', (req, res) => {
     res.json({ status: 'admin service ok' });
 });
 
-// admin-service/app.js
+/*
+ * GET /api/about
+ * Returns developers team names.
+ * Data is hardcoded to keep database empty.
+ */
 app.get('/api/about', (req, res) => {
     try {
         res.json([
@@ -23,6 +35,9 @@ app.get('/api/about', (req, res) => {
     }
 });
 
+/*
+ * Server listen.
+ */
 const PORT = process.env.PORT || 3003;
 app.listen(PORT, () => {
     console.log(`Admin service running on port ${PORT}`);

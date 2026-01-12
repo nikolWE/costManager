@@ -3,13 +3,26 @@ require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const axios = require('axios');
+/*
+ * users-service
+ * Responsibilities:
+ * - Manage users collection.
+ * - Retrieve user details.
+ * - Fetch total user costs by calling costs-service.
+ * - Send logs to logs-service.
+ */
+
 
 const User = require('./models/User');
 
+/*
+ * Express app usage.
+ */
 const app = express();
 app.use(express.json());
 
-/**
+/*
+ * writeLog:
  * Sends log to logs-service.
  * Never fails the request if logs-service is down.
  */
@@ -29,7 +42,9 @@ const writeLog = async (method, endpoint, status) => {
     }
 };
 
-// ---------- MongoDB connection ----------
+/*
+ * MongoDB connection and messages that give indecision about the status.
+ */
 mongoose
     .connect(process.env.MONGODB_URI)
     .then(() => {
@@ -39,12 +54,19 @@ mongoose
         console.error('MongoDB connection error (users-service):', err);
     });
 
-// ---------- Health ----------
+/*
+* GET /health
+* Returns 200 OK if the service is up and running.
+ */
 app.get('/health', (req, res) => {
     res.json({ status: 'ok' });
 });
 
-// ---------- Add User (POST /api/add) ----------
+/*
+ * POST /api/add
+ * Creates a new user.
+ * Required fields: id, first_name, last_name, birthday.
+ */
 app.post('/api/add', async (req, res) => {
     try {
         const { id, first_name, last_name, birthday } = req.body || {};
@@ -93,7 +115,10 @@ app.post('/api/add', async (req, res) => {
 });
 
 
-// ---------- Get All Users (GET /api/users) ----------
+/*
+ * GET /api/users
+ * Returns all users.
+ */
 app.get('/api/users', async (req, res) => {
     try {
         const users = await User.find().lean();
@@ -105,7 +130,11 @@ app.get('/api/users', async (req, res) => {
     }
 });
 
-// ---------- Get Specific User + Total (GET /api/users/:id) ----------
+/*
+ * GET /api/users/:id
+ * Returns user details and total costs.
+ * Calls costs-service (/api/total) to calculate total spending.
+ */
 app.get('/api/users/:id', async (req, res) => {
     try {
         const userId = Number(req.params.id);
@@ -147,7 +176,9 @@ app.get('/api/users/:id', async (req, res) => {
     }
 });
 
-// ---------- Start server ----------
+/*
+ * Server listen
+ */
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log('Users service running on port ' + PORT);

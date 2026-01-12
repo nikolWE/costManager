@@ -136,15 +136,50 @@ app.post('/api/add', async (req, res) => {
 
 
         if (
-            Number.isNaN(userid) ||
-            Number.isNaN(sum) ||
-            !category ||
-            !description
-        ) {
+            Number.isNaN(userid) || Number.isNaN(sum) || !category || !description)
+        {
             await writeLog('POST', '/api/add', 400);
             return res.status(400).json({
                 id: 400,
                 message: 'Missing required fields',
+            });
+        }
+        // userid must be positive
+        if (userid < 1) {
+            await writeLog('POST', '/api/add', 400);
+            return res.status(400).json({
+                id: 400,
+                message: 'userid must be a number >= 1'
+            });
+        }
+
+// validate user exists by calling users-service
+        if (!process.env.USERS_URL) {
+            await writeLog('POST', '/api/add', 500);
+            return res.status(500).json({
+                id: 2,
+                message: 'USERS_URL is not configured'
+            });
+        }
+
+        try {
+            // We only need to know if user exists
+            await axios.get(process.env.USERS_URL + '/api/users/' + userid);
+        } catch (e) {
+            // if users-service says 404, user doesn't exist
+            if (e.response && e.response.status === 404) {
+                await writeLog('POST', '/api/add', 400);
+                return res.status(400).json({
+                    id: 400,
+                    message: 'User does not exist'
+                });
+            }
+
+            // other errors (users-service down, etc.)
+            await writeLog('POST', '/api/add', 500);
+            return res.status(500).json({
+                id: 2,
+                message: 'Failed to validate user'
             });
         }
 

@@ -72,6 +72,18 @@ app.get('/health', (req, res) => {
 app.post('/api/add', async (req, res) => {
     try {
         const { id, first_name, last_name, birthday } = req.body || {};
+        /*
+        * Checks if the id is a number >= 0 or not a number, if not sends a message.
+         */
+        const idNum = Number(id);
+
+        if (Number.isNaN(idNum) || idNum < 0) {
+            await writeLog('POST', '/api/add', 400);
+            return res.status(400).json({
+                id: 400,
+                message: 'id must be a number bigger or equal to 0'
+            });
+        }
 
         if (!id || !first_name || !last_name || !birthday) {
             await writeLog('POST', '/api/add', 400);
@@ -90,7 +102,7 @@ app.post('/api/add', async (req, res) => {
             });
         }
         const user = await User.create({
-            id: Number(id),
+            id: idNum,
             first_name,
             last_name,
             birthday: birthDate

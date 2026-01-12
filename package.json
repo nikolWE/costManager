@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "node app.js"
+    "start": "node app.js",
+    "test": "jest"
   },
   "private": true,
   "keywords": [],
@@ -26,5 +27,8 @@
   "bugs": {
     "url": "https://github.com/nikolWE/costManager/issues"
   },
-  "homepage": "https://github.com/nikolWE/costManager#readme"
+  "homepage": "https://github.com/nikolWE/costManager#readme",
+  "devDependencies": {
+    "jest": "^30.2.0"
+  }
 }

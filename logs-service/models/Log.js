@@ -8,7 +8,7 @@ const mongoose = require('mongoose');
 const logSchema = new mongoose.Schema({
     service: String,
     method: String,        // GET / POST
-    endpoint: String,      // /api/add , /api/report 
+    endpoint: String,      // /api/add , /api/report
     status: Number,        // 200 / 400 / 500
     timestamp: Date,
     message: String

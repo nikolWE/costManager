@@ -10,7 +10,7 @@ const axios = require('axios');
  * Internal Dependencies
  */
 const User = require('./models/User');
-const UserException = require('./UserException'); // <--- הוספנו את זה
+const UserException = require('./userException'); // <--- הוספנו את זה
 
 const app = express();
 app.use(express.json());

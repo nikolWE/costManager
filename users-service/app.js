@@ -186,12 +186,7 @@ app.get('/api/users/:id', async (req, res) => {
 
     } catch (err) {
         if (err instanceof UserException) {
-            // טיפול מיוחד ל-404 כדי להחזיר הודעה פשוטה (String) ולא JSON,
-            // אם את רוצה לשמור על התנהגות ה-Browser שהראית קודם:
-            if (err.status === 404) {
-                return res.status(404).send(err.message);
-            }
-
+            // מחקנו את הבדיקה המיוחדת ל-404. עכשיו כולם מקבלים JSON.
             return res.status(err.status).json({
                 id: err.status,
                 message: err.message

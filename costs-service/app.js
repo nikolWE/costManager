@@ -218,7 +218,31 @@ app.get('/api/report', async (req, res) => {
         if (month < 1 || month > 12) {
             throw new CostException('month must be 1-12', 400);
         }
+        try {
+            // אנחנו שולחים בקשה לשרת היוזרים
+            const userRes = await axios.get(`${process.env.USERS_URL}/api/users/${userid}`);
 
+            // --- התיקון החדש: ---
+            // גם אם הסטטוס הוא 200, אנחנו בודקים אם הגוף של התשובה ריק!
+            // זה תופס מצבים שמונגו מחזיר null והאקספרס מחזיר אותו כ-json תקין.
+            if (!userRes.data || (typeof userRes.data === 'object' && Object.keys(userRes.data).length === 0)) {
+                throw new CostException('User not found (empty data)', 404);
+            }
+
+        } catch (axiosErr) {
+            // אם זו השגיאה שאנחנו זרקנו הרגע, תעביר אותה הלאה
+            if (axiosErr instanceof CostException) {
+                throw axiosErr;
+            }
+
+            // אם השרת השני החזיר 404 באמת
+            if (axiosErr.response && axiosErr.response.status === 404) {
+                throw new CostException('User does not exist', 404);
+            }
+
+            // כל שגיאה אחרת בתקשורת
+            throw new CostException('Failed to validate user', 500);
+        }
         const now = new Date();
         const currentYear = now.getFullYear();
         const currentMonth = now.getMonth() + 1;

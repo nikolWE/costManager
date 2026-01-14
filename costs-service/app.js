@@ -130,7 +130,8 @@ app.post('/api/add', async (req, res) => {
          */
         const userid = Number(req.body.userid);
         const sum = Number(req.body.sum);
-        const category = req.body.category;
+        const rawCategory = req.body.category;
+        const category = (rawCategory == null) ? '' : String(rawCategory).trim().toLowerCase();
         const description = req.body.description;
         /*
          * Date Handling:

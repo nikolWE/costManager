@@ -18,7 +18,6 @@ app.use(express.json());
 async function writeLog(method, endpoint, status) {
     try {
         if (!process.env.LOGS_URL) return;
-
         /*
          * Async Request:
          * We send the log asynchronously to avoid blocking the response.

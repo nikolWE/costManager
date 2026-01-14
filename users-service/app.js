@@ -1,40 +1,26 @@
 require('dotenv').config();
 /*
- * External Dependencies:
- * - express: Web framework for the API.
- * - mongoose: ODM for MongoDB interaction.
- * - axios: HTTP client for communicating with other microservices.
+ * External Dependencies
  */
 const express = require('express');
 const mongoose = require('mongoose');
 const axios = require('axios');
+
 /*
- * users-service
- * Responsibilities:
- * - Manage users collection.
- * - Retrieve user details.
- * - Fetch total user costs by calling costs-service.
- * - Send logs to logs-service.
+ * Internal Dependencies
  */
 const User = require('./models/User');
-/*
- * App Initialization:
- * Create the Express app and configure middleware
- * to parse JSON request bodies.
- */
+const UserException = require('./UserException'); // <--- הוספנו את זה
+
 const app = express();
 app.use(express.json());
+
 /*
- * writeLog Helper:
- * Asynchronously sends logs to the central logs-service.
- * Wraps the call in a try-catch to ensure that logging failures
- * do not crash the main application flow.
+ * writeLog Helper
  */
 const writeLog = async (method, endpoint, status) => {
     try {
-        /* If logs-service is not configured, skip logging */
         if (!process.env.LOGS_URL) return;
-        /* Send log entry to logs-service */
         await axios.post(process.env.LOGS_URL + '/api/logs', {
             service: 'users',
             method,
@@ -43,97 +29,60 @@ const writeLog = async (method, endpoint, status) => {
             timestamp: new Date()
         });
     } catch (e) {
-        /* Do not crash the service if logs-service is unavailable */
+        // Silent fail for logs
     }
 };
+
 /*
- * Database Connection:
- * Connects to MongoDB using the URI from environment variables.
- * Logs success or failure to the console for monitoring.
+ * Database Connection
  */
 mongoose
     .connect(process.env.MONGODB_URI)
-    .then(() => {
-        console.log('MongoDB connected (users-service)');
-    })
-    .catch((err) => {
-        console.error('MongoDB connection error (users-service):', err);
-    });
+    .then(() => console.log('MongoDB connected (users-service)'))
+    .catch((err) => console.error('MongoDB connection error (users-service):', err));
+
 /*
  * GET /health
- * Health Check Endpoint:
- * Returns 200 OK to indicate the service is running.
- * Used by load balancers or container orchestrators.
  */
 app.get('/health', (req, res) => {
     res.json({ status: 'ok' });
 });
+
 /*
  * POST /api/add
- * User Creation:
- * Entry point for adding new users to the database.
- * Requires strict validation of input fields.
  */
 app.post('/api/add', async (req, res) => {
     try {
         const { id, first_name, last_name, birthday } = req.body || {};
-        /*
-         * Validation - ID:
-         * Ensure the ID is a valid non-negative number.
-         * Returns 400 Bad Request if validation fails.
-         */
-        const idNum = Number(id);
 
+        // Validation - ID
+        const idNum = Number(id);
         if (Number.isNaN(idNum) || idNum < 1) {
             await writeLog('POST', '/api/add', 400);
-            return res.status(400).json({
-                id: 400,
-                message: 'id must be a number bigger or equal to 0'
-            });
+            throw new UserException('id must be a number bigger or equal to 0', 400);
         }
-        /*
-         * Validation - Missing Fields:
-         * Check if any required field is undefined or empty.
-         * We need id, names, and birthday to proceed.
-         */
+
+        // Validation - Missing Fields
         if (!id || !first_name || !last_name || !birthday) {
             await writeLog('POST', '/api/add', 400);
-            return res.status(400).json({
-                id: 400,
-                message: 'Missing required fields'
-            });
+            throw new UserException('Missing required fields', 400);
         }
-        /*
-         * Date Handling:
-         * Append a specific time (T12:00:00) to the date string to prevent
-         * timezone offsets from shifting the date to the previous day.
-         */
-        const birthDate = new Date(birthday + 'T12:00:00');
+
+        // Validation - Date
+        const birthDate = new Date(birthday + 'T12:00:00'); // Fix timezone issue
 
         if (Number.isNaN(birthDate.getTime())) {
-            /*
-         * Validation - Future Date:
-         * Check if the provided birthday is in the future.
-         * A user cannot be born after the current date.
-         */
-            if (birthDate > new Date()) {
-                await writeLog('POST', '/api/add', 400);
-                return res.status(400).json({
-                    id: 400,
-                    message: 'Birthday cannot be in the future'
-                });
-            }
             await writeLog('POST', '/api/add', 400);
-            return res.status(400).json({
-                id: 400,
-                message: 'Invalid birthday format. Use YYYY-MM-DD'
-            });
+            throw new UserException('Invalid birthday format. Use YYYY-MM-DD', 400);
         }
-        /*
-         * DB Insertion:
-         * Create the user document in MongoDB.
-         * If successful, return 201 Created.
-         */
+
+        // Validation - Future Date
+        if (birthDate > new Date()) {
+            await writeLog('POST', '/api/add', 400);
+            throw new UserException('Birthday cannot be in the future', 400);
+        }
+
+        // DB Insertion
         const user = await User.create({
             id: idNum,
             first_name,
@@ -145,11 +94,15 @@ app.post('/api/add', async (req, res) => {
         return res.status(201).json(user);
 
     } catch (err) {
-        /*
-         * Duplicate Key Error:
-         * Code 11000 indicates a unique index violation (duplicate ID).
-         * Return 409 Conflict in this specific case.
-         */
+        // טיפול בשגיאות שלנו (UserException)
+        if (err instanceof UserException) {
+            return res.status(err.status).json({
+                id: err.status,
+                message: err.message
+            });
+        }
+
+        // טיפול בשגיאת כפילות של מונגו (Duplicate Key)
         if (err && err.code === 11000) {
             await writeLog('POST', '/api/add', 409);
             return res.status(409).json({
@@ -158,19 +111,17 @@ app.post('/api/add', async (req, res) => {
             });
         }
 
-        // General server error
+        // שגיאה כללית
         await writeLog('POST', '/api/add', 500);
         return res.status(500).json({
-            id: 1,
+            id: 1, // לפי הקונבנציה של שגיאת שרת כללית
             message: err.message
         });
     }
 });
+
 /*
  * GET /api/users
- * Bulk Retrieval:
- * Fetches all user documents from the collection.
- * Uses .lean() for better performance (returns plain JS objects).
  */
 app.get('/api/users', async (req, res) => {
     try {
@@ -182,11 +133,9 @@ app.get('/api/users', async (req, res) => {
         return res.status(500).json({ id: 2, message: err.message });
     }
 });
+
 /*
  * GET /api/users/:id
- * Detailed User View:
- * Returns user details combined with their total calculated costs.
- * Requires inter-service communication with 'costs-service'.
  */
 app.get('/api/users/:id', async (req, res) => {
     try {
@@ -194,55 +143,68 @@ app.get('/api/users/:id', async (req, res) => {
 
         if (Number.isNaN(userId)) {
             await writeLog('GET', '/api/users/:id', 400);
-            return res.status(400).json({ id: 400, message: 'Invalid user id' });
+            throw new UserException('Invalid user id', 400);
         }
-        /* Fetch user from database */
+
         const user = await User.findOne({ id: userId }).lean();
         if (!user) {
             await writeLog('GET', '/api/users/:id', 404);
-            return res.status(404).send('User not found'); // <--- זה מה שחסר לך!;
+            // כאן אנחנו זורקים שגיאה שתגיע ל-catch למטה
+            throw new UserException('User not found', 404);
         }
-        /*
-         * External Dependency Check:
-         * Before calling costs-service, verify the URL is configured.
-         * This prevents runtime crashes due to missing environment variables.
-         */
+
         if (!process.env.COSTS_URL) {
             await writeLog('GET', '/api/users/:id', 500);
-            return res.status(500).json({ id: 2, message: 'COSTS_URL is not configured' });
+            // זו שגיאת שרת פנימית, אז זורקים 500
+            throw new UserException('COSTS_URL is not configured', 500);
         }
-        /*
-         * Aggregation Logic:
-         * Call costs-service to get the sum of expenses for this user.
-         * We use a specific endpoint designed for total calculation.
-         */
-        const totalResponse = await axios.get(process.env.COSTS_URL + '/api/total', {
-            params: { userid: userId }
-        });
 
-        const total = Number(totalResponse.data && totalResponse.data.total) || 0;
+        // קריאה ל-costs service
+        // נשתמש ב-try/catch פנימי קטן כדי שאם השרת השני נפל, לא נחזיר 500 אלא נטפל בזה
+        let total = 0;
+        try {
+            const totalResponse = await axios.get(process.env.COSTS_URL + '/api/total', {
+                params: { userid: userId }
+            });
+            total = Number(totalResponse.data && totalResponse.data.total) || 0;
+        } catch (axiosErr) {
+            // אם ה-costs service נפל או החזיר שגיאה, אנחנו יכולים להחליט:
+            // אפשרות א': להכשיל את כל הבקשה (throw)
+            // אפשרות ב': להחזיר total = 0 ולהמשיך (יותר עמיד)
+            // כרגע נשאיר total = 0 ונרשום לוג אזהרה
+            console.error('Failed to fetch costs:', axiosErr.message);
+        }
 
         await writeLog('GET', '/api/users/:id', 200);
-        /*
-         * Response Composition:
-         * Merge local user data with the fetched total cost.
-         */
+
         return res.json({
             id: user.id,
             first_name: user.first_name,
             last_name: user.last_name,
             total: total
         });
+
     } catch (err) {
-        /* Handle unexpected errors: log the failure and return HTTP 500 */
+        if (err instanceof UserException) {
+            // טיפול מיוחד ל-404 כדי להחזיר הודעה פשוטה (String) ולא JSON,
+            // אם את רוצה לשמור על התנהגות ה-Browser שהראית קודם:
+            if (err.status === 404) {
+                return res.status(404).send(err.message);
+            }
+
+            return res.status(err.status).json({
+                id: err.status,
+                message: err.message
+            });
+        }
+
         await writeLog('GET', '/api/users/:id', 500);
         return res.status(500).json({ id: 2, message: err.message });
     }
 });
+
 /*
- * Server Startup:
- * Listen on the configured port (default 3000).
- * Log a confirmation message when the server is ready.
+ * Server Startup
  */
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

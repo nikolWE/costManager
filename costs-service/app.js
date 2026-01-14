@@ -20,7 +20,7 @@ const pinoHttp = require('pino-http');
 
 const Cost = require('./models/Cost');
 const Report = require('./models/Report');
-const CostException = require('./CostException');
+const CostException = require('./costException');
 
 const app = express();
 app.use(express.json());

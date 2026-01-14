@@ -10,5 +10,4 @@ class CostException {
         this.name = "CostException";
     }
 }
-
 module.exports = CostException;

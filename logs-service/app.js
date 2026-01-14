@@ -72,9 +72,10 @@ app.post('/api/logs', async (req, res) => {
     try {
         const { service, method, endpoint, status, message } = req.body;
         /*
-         * Validation Logic:
-         * Ensure critical fields (method, endpoint, status) are present.
-         * Returns 400 Bad Request if data is incomplete.
+         * Architectural Note:
+         * Currently, this query retrieves all documents without pagination.
+         * While sufficient for this project's scope, a production-grade implementation
+         * would utilize cursor-based pagination (limit/skip) to handle large datasets efficiently.
          */
         if (!service || !method || !endpoint || !status) {
             return res.status(400).json({

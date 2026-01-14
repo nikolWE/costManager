@@ -168,11 +168,9 @@ app.post('/api/add', async (req, res) => {
             await axios.get(process.env.USERS_URL + '/api/users/' + userid);
         } catch (axiosErr) {
             if (axiosErr.response && axiosErr.response.status === 404) {
-                await writeLog('POST', '/api/add', 400);
-                throw new CostException('User does not exist', 400);
+                throw new CostException('User does not exist', 404);
             }
-            // Other axios errors
-            await writeLog('POST', '/api/add', 500);
+
             throw new CostException('Failed to validate user', 500);
         }
 
@@ -297,7 +295,7 @@ app.get('/api/report', async (req, res) => {
                 id: err.id,
                 message: err.message
             });
-        } // <--- התיקון כאן: הוספתי סוגר מסולסל שחסר לך
+        }
         return res.status(500).json({ id: 2, message: err.message });
     }
 });
@@ -329,7 +327,7 @@ app.get('/api/total', async (req, res) => {
                 id: err.id,
                 message: err.message
             });
-        } // <--- התיקון כאן: הוספתי סוגר מסולסל שחסר לך
+        }
         return res.status(500).json({ id: 2, message: err.message });
     }
 });

@@ -200,7 +200,7 @@ app.get('/api/users/:id', async (req, res) => {
         const user = await User.findOne({ id: userId }).lean();
         if (!user) {
             await writeLog('GET', '/api/users/:id', 404);
-            return res.status(404).json({ id: 1, message: 'User not found' });
+            return res.status(404).send('User not found'); // <--- זה מה שחסר לך!;
         }
         /*
          * External Dependency Check:

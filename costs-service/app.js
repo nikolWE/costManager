@@ -165,18 +165,12 @@ app.post('/api/add', async (req, res) => {
         }
 
         try {
-            // שולחים בקשה
-            const userRes = await axios.get(checkUserUrl);
-            console.log(`[DEBUG] User check response status: ${userRes.status}`); // לוג 3 - אם זה מודפס, השרת החזיר הצלחה!
-
+            await axios.get(process.env.USERS_URL + '/api/users/' + userid);
         } catch (axiosErr) {
-            console.log(`[DEBUG] Axios Error caught! Status: ${axiosErr.response?.status}`); // לוג 4 - כאן צריכה להיות השגיאה
-
             if (axiosErr.response && axiosErr.response.status === 404) {
-                console.log('[DEBUG] Throwing User Not Found Exception');
                 throw new CostException('User does not exist', 404);
             }
-            console.error('[DEBUG] Users Service Error:', axiosErr.message);
+
             throw new CostException('Failed to validate user', 500);
         }
 
@@ -193,7 +187,6 @@ app.post('/api/add', async (req, res) => {
         return res.status(201).json(cost);
 
     } catch (err) {
-        console.log(`[DEBUG] Entered Catch Block. Message: ${err.message}`); // לוג 5 - תפיסת שגיאה סופית
         if (err instanceof CostException) {
             return res.status(err.id).json({
                 id: err.id,
@@ -218,8 +211,6 @@ app.get('/api/report', async (req, res) => {
         const userid = Number(req.query.userid ?? req.query.id);
         const year = Number(req.query.year);
         const month = Number(req.query.month);
-
-        console.log(`[DEBUG] Request for Report: User=${userid}, Year=${year}, Month=${month}`); // לוג 1
 
         if (Number.isNaN(userid) || Number.isNaN(year) || Number.isNaN(month)) {
             throw new CostException('id, year, month are required and must be numbers', 400);

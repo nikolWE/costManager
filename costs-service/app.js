@@ -158,6 +158,18 @@ app.post('/api/add', async (req, res) => {
             createdAt = parsed.date;
         }
         /*
+         * Date Validation (No Past Dates):
+         * Ensure the cost date is not in the past.
+         * We compare the cost date to "today at 00:00:00".
+         */
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+        if (createdAt < today) {
+            await writeLog('POST', '/api/add', 400);
+            throw new CostException('Cannot add cost for a past date', 400);
+        }
+        /*
          * General Input Validation:
          * Verify that all mandatory fields (id, sum, category, description)
          * are present and possess valid types before proceeding.

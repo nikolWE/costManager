@@ -116,4 +116,47 @@ describe("costs-service", () => {
         expect(out.status).toBe(400);
         assertErrorShape(out.data);
     });
+    /*
+     * Negative Test (Business Logic):
+     * Attempts to add a cost with a past date.
+     * Expects the server to reject it with HTTP 400.
+     */
+    test("POST /api/add past date -> 400 {id,message}", async () => {
+        /*
+         * Date Calculation:
+         * Create a date object representing 'yesterday' to ensure the test
+         * always uses a date in the past relative to the current execution time.
+         */
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        /*
+         * Date Formatting:
+         * Convert the date object to a 'YYYY-MM-DD' string format
+         * which is the expected input format for the API.
+         */
+        const dateStr = yesterday.toISOString().split('T')[0];
+
+        const payload = {
+            userid: TEST_USER_ID,
+            description: "past cost attempt",
+            category: "food",
+            sum: 10,
+            createdAt: dateStr
+        };
+        /*
+         * Execution & Verification:
+         * Send the POST request using the safe wrapper.
+         * We expect the server to respond with a 400 status code.
+         */
+        const out = await requestSafe(axios.post(COSTS_URL + "/api/add", payload));
+
+        expect(out.status).toBe(400);
+        assertErrorShape(out.data);
+        /*
+         * Error Message Validation:
+         * Confirm that the rejection reason is indeed the date validation
+         * and not some other missing field or error.
+         */
+        expect(out.data.message).toBe('Cannot add cost for a past date');
+    });
 });

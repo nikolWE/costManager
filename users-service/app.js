@@ -250,3 +250,5 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log('Users service running on port ' + PORT);
 });
+
+console.log('LOGS_URL=', process.env.LOGS_URL);

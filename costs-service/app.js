@@ -490,3 +490,5 @@ const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
     console.log(`Costs service running on port ${PORT}`);
 });
+
+console.log('LOGS_URL=', process.env.LOGS_URL);

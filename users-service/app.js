@@ -1,4 +1,6 @@
+
 require('dotenv').config();
+
 /*
  * External Dependencies:
  * - express: Web framework for handling HTTP requests.
@@ -168,6 +170,7 @@ app.get('/api/users', async (req, res) => {
         return res.status(500).json({ id: 2, message: err.message });
     }
 });
+
 /*
  * GET /api/users/:id
  * Logic: Fetch detailed user information including aggregated costs.
@@ -246,9 +249,10 @@ app.get('/api/users/:id', async (req, res) => {
  * Server Startup:
  * Initialize the HTTP server on the specified port.
  */
+
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log('Users service running on port ' + PORT);
 });
 
-console.log('LOGS_URL=', process.env.LOGS_URL);

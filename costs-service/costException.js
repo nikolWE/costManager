@@ -11,3 +11,4 @@ class CostException {
     }
 }
 module.exports = CostException;
+console.log('LOGS_URL=', process.env.LOGS_URL);

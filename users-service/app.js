@@ -1,35 +1,40 @@
-
 require('dotenv').config();
-
 /*
  * External Dependencies:
- * - express: Web framework for handling HTTP requests.
- * - mongoose: ODM for MongoDB schema definition and queries.
- * - axios: HTTP client used for inter-service communication (logs/costs).
+ * - express: Web framework for the API.
+ * - mongoose: ODM for MongoDB interaction.
+ * - axios: HTTP client for communicating with other microservices.
  */
 const express = require('express');
 const mongoose = require('mongoose');
 const axios = require('axios');
 /*
- * Internal Dependencies:
- * - User: Mongoose model representing the user document structure.
- * - UserException: Custom error class for standardized exception handling.
+ * users-service
+ * Responsibilities:
+ * - Manage users collection.
+ * - Retrieve user details.
+ * - Fetch total user costs by calling costs-service.
+ * - Send logs to logs-service.
  */
 const User = require('./models/User');
-const UserException = require('./userException');
-
+/*
+ * App Initialization:
+ * Create the Express app and configure middleware
+ * to parse JSON request bodies.
+ */
 const app = express();
 app.use(express.json());
-
+/*
+ * writeLog Helper:
+ * Asynchronously sends logs to the central logs-service.
+ * Wraps the call in a try-catch to ensure that logging failures
+ * do not crash the main application flow.
+ */
 const writeLog = async (method, endpoint, status) => {
     try {
-        /*
-        * Logging Utility (Async):
-        * Sends log data to the centralized 'logs-service'.
-        * Wrapped in a try-catch block to ensure that logging failures
-        * do not interrupt the main application flow (Fire-and-Forget).
-        */
+        /* If logs-service is not configured, skip logging */
         if (!process.env.LOGS_URL) return;
+        /* Send log entry to logs-service */
         await axios.post(process.env.LOGS_URL + '/api/logs', {
             service: 'users',
             method,
@@ -38,77 +43,96 @@ const writeLog = async (method, endpoint, status) => {
             timestamp: new Date()
         });
     } catch (e) {
-        /* Silent failure: Logging system downtime should not crash the app */
+        /* Do not crash the service if logs-service is unavailable */
     }
 };
 /*
- * Database Initialization:
- * Establishes a connection to the MongoDB cluster.
- * Logs the connection status to the console for monitoring purposes.
+ * Database Connection:
+ * Connects to MongoDB using the URI from environment variables.
+ * Logs success or failure to the console for monitoring.
  */
 mongoose
     .connect(process.env.MONGODB_URI)
-    .then(() => console.log('MongoDB connected (users-service)'))
-    .catch((err) => console.error('MongoDB connection error (users-service):', err));
+    .then(() => {
+        console.log('MongoDB connected (users-service)');
+    })
+    .catch((err) => {
+        console.error('MongoDB connection error (users-service):', err);
+    });
 /*
+ * GET /health
  * Health Check Endpoint:
- * Simple probe used by load balancers or container orchestrators
- * to verify the service is up and ready to accept traffic.
+ * Returns 200 OK to indicate the service is running.
+ * Used by load balancers or container orchestrators.
  */
 app.get('/health', (req, res) => {
     res.json({ status: 'ok' });
 });
 /*
  * POST /api/add
- * Logic: Creates a new user in the system.
- * Requires comprehensive validation of all input fields before insertion.
+ * User Creation:
+ * Entry point for adding new users to the database.
+ * Requires strict validation of input fields.
  */
 app.post('/api/add', async (req, res) => {
     try {
         const { id, first_name, last_name, birthday } = req.body || {};
         /*
-         * User ID Validation:
-         * Ensure the ID is a valid positive integer.
-         * This prevents malformed data or negative IDs from entering the persistence layer.
+         * Validation - ID:
+         * Ensure the ID is a valid non-negative number.
+         * Returns 400 Bad Request if validation fails.
          */
         const idNum = Number(id);
+
         if (Number.isNaN(idNum) || idNum < 1) {
             await writeLog('POST', '/api/add', 400);
-            throw new UserException('id must be a number bigger or equal to 0', 400);
+            return res.status(400).json({
+                id: 400,
+                message: 'id must be a number bigger or equal to 0'
+            });
         }
         /*
-         * Field Completeness Check:
-         * Verify that all mandatory fields are present in the request body.
-         * Partial records are not allowed in this system.
+         * Validation - Missing Fields:
+         * Check if any required field is undefined or empty.
+         * We need id, names, and birthday to proceed.
          */
         if (!id || !first_name || !last_name || !birthday) {
             await writeLog('POST', '/api/add', 400);
-            throw new UserException('Missing required fields', 400);
+            return res.status(400).json({
+                id: 400,
+                message: 'Missing required fields'
+            });
         }
         /*
-         * Date Normalization:
-         * Appending 'T12:00:00' prevents timezone offsets from shifting the date
-         * to the previous day (e.g., UTC midnight vs Local Time).
+         * Date Handling:
+         * Append a specific time (T12:00:00) to the date string to prevent
+         * timezone offsets from shifting the date to the previous day.
          */
         const birthDate = new Date(birthday + 'T12:00:00');
 
         if (Number.isNaN(birthDate.getTime())) {
-            await writeLog('POST', '/api/add', 400);
-            throw new UserException('Invalid birthday format. Use YYYY-MM-DD', 400);
-        }
-        /*
-         * Logical Date Validation:
-         * Ensure the user was born in the past.
-         * Future dates are logically impossible for a birthday field.
+            /*
+         * Validation - Future Date:
+         * Check if the provided birthday is in the future.
+         * A user cannot be born after the current date.
          */
-        if (birthDate > new Date()) {
+            if (birthDate > new Date()) {
+                await writeLog('POST', '/api/add', 400);
+                return res.status(400).json({
+                    id: 400,
+                    message: 'Birthday cannot be in the future'
+                });
+            }
             await writeLog('POST', '/api/add', 400);
-            throw new UserException('Birthday cannot be in the future', 400);
+            return res.status(400).json({
+                id: 400,
+                message: 'Invalid birthday format. Use YYYY-MM-DD'
+            });
         }
         /*
-         * Database Persistence:
-         * Create the new user document using Mongoose.
-         * If successful, return the created object with status 201 (Created).
+         * DB Insertion:
+         * Create the user document in MongoDB.
+         * If successful, return 201 Created.
          */
         const user = await User.create({
             id: idNum,
@@ -116,25 +140,15 @@ app.post('/api/add', async (req, res) => {
             last_name,
             birthday: birthDate
         });
+
         await writeLog('POST', '/api/add', 201);
         return res.status(201).json(user);
 
     } catch (err) {
         /*
-         * Custom Exception Handling:
-         * Catch validation errors thrown explicitly by our code.
-         * Return the specific status code and message defined in the exception.
-         */
-        if (err instanceof UserException) {
-            return res.status(err.status).json({
-                id: err.status,
-                message: err.message
-            });
-        }
-        /*
-         * MongoDB Duplicate Key Error (E11000):
-         * Specifically handle cases where a user with the same ID already exists.
-         * Return a 409 Conflict status code.
+         * Duplicate Key Error:
+         * Code 11000 indicates a unique index violation (duplicate ID).
+         * Return 409 Conflict in this specific case.
          */
         if (err && err.code === 11000) {
             await writeLog('POST', '/api/add', 409);
@@ -143,11 +157,8 @@ app.post('/api/add', async (req, res) => {
                 message: 'User already exists'
             });
         }
-        /*
-         * Generic Server Error:
-         * Fallback for unexpected runtime errors.
-         * Return a 500 status code to indicate internal failure.
-         */
+
+        // General server error
         await writeLog('POST', '/api/add', 500);
         return res.status(500).json({
             id: 1,
@@ -157,8 +168,9 @@ app.post('/api/add', async (req, res) => {
 });
 /*
  * GET /api/users
- * Logic: Retrieve all users from the database.
- * Uses .lean() for performance optimization (returns plain JS objects).
+ * Bulk Retrieval:
+ * Fetches all user documents from the collection.
+ * Uses .lean() for better performance (returns plain JS objects).
  */
 app.get('/api/users', async (req, res) => {
     try {
@@ -170,11 +182,11 @@ app.get('/api/users', async (req, res) => {
         return res.status(500).json({ id: 2, message: err.message });
     }
 });
-
 /*
  * GET /api/users/:id
- * Logic: Fetch detailed user information including aggregated costs.
- * Requires communication with the external 'costs-service'.
+ * Detailed User View:
+ * Returns user details combined with their total calculated costs.
+ * Requires inter-service communication with 'costs-service'.
  */
 app.get('/api/users/:id', async (req, res) => {
     try {
@@ -182,46 +194,38 @@ app.get('/api/users/:id', async (req, res) => {
 
         if (Number.isNaN(userId)) {
             await writeLog('GET', '/api/users/:id', 400);
-            throw new UserException('Invalid user id', 400);
+            return res.status(400).json({ id: 400, message: 'Invalid user id' });
         }
-        /*
-         * Database Lookup:
-         * Attempt to find the user by their custom numeric ID.
-         * Explicitly throw a 404 exception if no document matches.
-         */
+        /* Fetch user from database */
         const user = await User.findOne({ id: userId }).lean();
         if (!user) {
             await writeLog('GET', '/api/users/:id', 404);
-            throw new UserException('User not found', 404);
+            return res.status(404).json({ id: 1, message: 'User not found' });
         }
         /*
-         * Dependency Check:
-         * Ensure the Costs Service URL is configured in the environment.
-         * This prevents runtime crashes when attempting the axios call.
+         * External Dependency Check:
+         * Before calling costs-service, verify the URL is configured.
+         * This prevents runtime crashes due to missing environment variables.
          */
         if (!process.env.COSTS_URL) {
             await writeLog('GET', '/api/users/:id', 500);
-            throw new UserException('COSTS_URL is not configured', 500);
+            return res.status(500).json({ id: 2, message: 'COSTS_URL is not configured' });
         }
         /*
-         * Microservice Aggregation (Fault Tolerant):
-         * Perform a request to the costs-service to get the total expenses.
-         * Wrapped in a separate try-catch to allow partial success:
-         * if costs-service fails, we return the user with total=0.
+         * Aggregation Logic:
+         * Call costs-service to get the sum of expenses for this user.
+         * We use a specific endpoint designed for total calculation.
          */
-        let total = 0;
-        try {
-            const totalResponse = await axios.get(process.env.COSTS_URL + '/api/total', {
-                params: { userid: userId }
-            });
-            total = Number(totalResponse.data && totalResponse.data.total) || 0;
-        } catch (axiosErr) {
-            console.error('Failed to fetch costs:', axiosErr.message);
-        }
+        const totalResponse = await axios.get(process.env.COSTS_URL + '/api/total', {
+            params: { userid: userId }
+        });
+
+        const total = Number(totalResponse.data && totalResponse.data.total) || 0;
+
         await writeLog('GET', '/api/users/:id', 200);
         /*
          * Response Composition:
-         * Merge the local user data with the fetched total cost.
+         * Merge local user data with the fetched total cost.
          */
         return res.json({
             id: user.id,
@@ -230,29 +234,17 @@ app.get('/api/users/:id', async (req, res) => {
             total: total
         });
     } catch (err) {
-        /*
-         * Error Handling Strategy:
-         * Return consistent JSON error responses for all exceptions,
-         * including 404 Not Found, to maintain API uniformity.
-         */
-        if (err instanceof UserException) {
-            return res.status(err.status).json({
-                id: err.status,
-                message: err.message
-            });
-        }
+        /* Handle unexpected errors: log the failure and return HTTP 500 */
         await writeLog('GET', '/api/users/:id', 500);
         return res.status(500).json({ id: 2, message: err.message });
     }
 });
 /*
  * Server Startup:
- * Initialize the HTTP server on the specified port.
+ * Listen on the configured port (default 3000).
+ * Log a confirmation message when the server is ready.
  */
-
-
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log('Users service running on port ' + PORT);
 });
-

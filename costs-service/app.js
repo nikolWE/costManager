@@ -20,7 +20,6 @@ const pinoHttp = require('pino-http');
 
 const Cost = require('./models/Cost');
 const Report = require('./models/Report');
-const CostException = require('./costException');
 
 const app = express();
 app.use(express.json());
@@ -126,10 +125,8 @@ app.get('/health', (req, res) => {
 app.post('/api/add', async (req, res) => {
     try {
         /*
-         * Parameter Extraction & Normalization:
-         * Explicitly cast input fields to ensure type safety (Numbers).
-         * String inputs like 'category' are trimmed and lowercased to
-         * maintain consistency across the database (e.g., 'Food' -> 'food').
+         * Input Extraction:
+         * Explicitly casting numbers to ensure type safety before processing.
          */
         const userid = Number(req.body.userid);
         const sum = Number(req.body.sum);
@@ -137,96 +134,96 @@ app.post('/api/add', async (req, res) => {
         const category = (rawCategory == null) ? '' : String(rawCategory).trim().toLowerCase();
         const description = req.body.description;
         /*
-         * Default Timestamp Initialization:
-         * Initialize 'createdAt' with the current server time.
-         * This default value is used if the user does not provide
-         * a specific date for the cost entry.
+         * Date Handling:
+         * Defaults to current time (Date.now).
+         * If a custom date is provided, it goes through strict validation.
          */
         let createdAt = new Date();
+
         if (req.body.createdAt != null && req.body.createdAt !== '') {
             const parsed = parseStrictDate(req.body.createdAt);
-            /*
-             * Validation Error Handling:
-             * If the date parsing fails (returns ok: false), we log the incident
-             * as a Bad Request (400) and immediately halt execution by throwing
-             * a CostException to be caught by the global error handler.
-             */
+
             if (!parsed.ok) {
                 await writeLog('POST', '/api/add', 400);
-                throw new CostException('createdAt is invalid (YYYY-MM-DD)', 400);
+                return res.status(400).json({
+                    id: 400,
+                    message: 'createdAt is invalid (YYYY-MM-DD)',
+                });
             }
             createdAt = parsed.date;
         }
         /*
-         * Date Validation (No Past Dates):
-         * Ensure the cost date is not in the past.
-         * We compare the cost date to "today at 00:00:00".
+         * Field Validation:
+         * Checks for missing values or invalid number formats (NaN).
+         * Ensures data integrity before reaching the database.
          */
-        const now = new Date();
-        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
-        if (createdAt < today) {
+        if (Number.isNaN(userid) || Number.isNaN(sum) || !category || !description || description.trim() === '')
+        {
             await writeLog('POST', '/api/add', 400);
-            throw new CostException('Cannot add cost for a past date', 400);
+            return res.status(400).json({
+                id: 400,
+                message: 'Missing required fields',
+            });
         }
-        /*
-         * General Input Validation:
-         * Verify that all mandatory fields (id, sum, category, description)
-         * are present and possess valid types before proceeding.
-         * This prevents runtime errors during database insertion.
-         */
-        if (Number.isNaN(userid) || Number.isNaN(sum) || !category || !description || description.trim() === '') {
-            await writeLog('POST', '/api/add', 400);
-            throw new CostException('Missing required fields', 400);
-        }
-        /*
-         * User ID Constraint Check:
-         * IDs must be positive integers. This check validates the logical
-         * integrity of the user identifier before attempting any DB lookups.
-         */
+        // userid must be positive
         if (userid < 1) {
             await writeLog('POST', '/api/add', 400);
-            throw new CostException('userid must be a number >= 1', 400);
+            return res.status(400).json({
+                id: 400,
+                message: 'userid must be a number >= 1'
+            });
         }
         /*
-         * Financial Logic Validation:
-         * Costs cannot be zero or negative. This ensures that the ledger
-         * only reflects actual expenses and maintains data consistency.
+         * Validation - Logic:
+         * Ensure the sum is a positive number.
+         * We do not allow zero or negative expenses in this system.
          */
         if (sum <= 0) {
             await writeLog('POST', '/api/add', 400);
-            throw new CostException('sum must be greater than 0', 400);
+            return res.status(400).json({
+                id: 400,
+                message: 'sum must be greater than 0'
+            });
         }
         /*
-         * Service Configuration Check:
-         * Before attempting to validate the user, we ensure that the
-         * environment variable for the users-service URL is defined.
-         * This prevents undefined behavior during the HTTP request.
+         * User Validation (Microservice Call):
+         * Checks if the user exists by querying the external users-service.
+         * Fails if the configuration URL is missing.
          */
         if (!process.env.USERS_URL) {
             await writeLog('POST', '/api/add', 500);
-            throw new CostException('USERS_URL is not configured', 500);
+            return res.status(500).json({
+                id: 2,
+                message: 'USERS_URL is not configured'
+            });
         }
-        /*
-        * Inter-Service Communication:
-        * We perform a synchronous HTTP GET request to the external users-service.
-        * This step verifies integrity by ensuring the user ID actually exists
-        * in the system before we allow a cost to be associated with it.
-        */
         try {
+            // We only need to know if user exists
             await axios.get(process.env.USERS_URL + '/api/users/' + userid);
-        } catch (axiosErr) {
-            if (axiosErr.response && axiosErr.response.status === 404) {
-                throw new CostException('User does not exist', 404);
+        } catch (e) {
+            /*
+             * Axios Error Handling:
+             * Distinguishes between a 404 (User not found) and other errors
+             * (Network issues, service down) to return the correct status code.
+             */
+            if (e.response && e.response.status === 404) {
+                await writeLog('POST', '/api/add', 400);
+                return res.status(400).json({
+                    id: 400,
+                    message: 'User does not exist'
+                });
             }
-
-            throw new CostException('Failed to validate user', 500);
+            // other errors (users-service down, etc.)
+            await writeLog('POST', '/api/add', 500);
+            return res.status(500).json({
+                id: 2,
+                message: 'Failed to validate user'
+            });
         }
         /*
-         * Database Persistence:
-         * Once all validations pass (input format, logic, and user existence),
-         * we persist the new cost document into the MongoDB collection.
-         * The 'create' method handles the insertion and returns the saved object.
+         * DB Insertion:
+         * Creates the document in MongoDB using the Mongoose model.
+         * Returns 201 Created on success.
          */
         const cost = await Cost.create({
             userid,
@@ -235,37 +232,18 @@ app.post('/api/add', async (req, res) => {
             description,
             createdAt,
         });
-        /*
-         * Finalization & Logging:
-         * Log the successful transaction to the centralized logs-service
-         * and return a 201 Created status code with the JSON payload.
-         */
         await writeLog('POST', '/api/add', 201);
         return res.status(201).json(cost);
 
     } catch (err) {
         /*
-         * Global Exception Handling:
-         * Differentiate between known application errors (CostException)
-         * and unexpected runtime errors (Database crashes, etc).
-         * Known errors return their specific status codes (400, 404).
-         */
-        if (err instanceof CostException) {
-            return res.status(err.id).json({
-                id: err.id,
-                message: err.message
-            });
-        }
-        /*
-         * Critical Failure Handler:
-         * Catch any unhandled exceptions, log the critical failure,
-         * and return a generic 500 Internal Server Error to the client
-         * to prevent leaking sensitive stack trace information.
+         * Global Error Handler:
+         * Catches any unexpected errors in the try block and returns a 500 status.
          */
         await writeLog('POST', '/api/add', 500);
         return res.status(500).json({
-            id: 2,
-            message: err.message || 'Internal Server Error',
+            id: 1,
+            message: err.message,
         });
     }
 });
@@ -277,61 +255,36 @@ app.post('/api/add', async (req, res) => {
  */
 app.get('/api/report', async (req, res) => {
     try {
-        /*
-         * Input Parsing & Validation:
-         * Extract query parameters (id, year, month).
-         * We support both 'userid' and 'id' as keys for flexibility.
-         * Type casting ensures we work with safe Number primitives.
-         */
         const userid = Number(req.query.userid ?? req.query.id);
         const year = Number(req.query.year);
         const month = Number(req.query.month);
-
+        /*
+         * Query Parameter Validation:
+         * Ensures all necessary parameters are present and are valid numbers.
+         */
         if (Number.isNaN(userid) || Number.isNaN(year) || Number.isNaN(month)) {
-            throw new CostException('id, year, month are required and must be numbers', 400);
+            return res.status(400).json({
+                id: 400,
+                message: 'id, year, month are required and must be numbers'
+            });
         }
         if (month < 1 || month > 12) {
-            throw new CostException('month must be 1-12', 400);
+            return res.status(400).json({ id: 400, message: 'month must be 1-12' });
         }
         /*
-         * External User Verification:
-         * Before processing the report, verify user existence via users-service.
-         * This prevents generating reports for non-existent entities.
-         */
-        try {
-            const userRes = await axios.get(`${process.env.USERS_URL}/api/users/${userid}`);
-            if (!userRes.data || (typeof userRes.data === 'object' && Object.keys(userRes.data).length === 0)) {
-                throw new CostException('User not found (empty data)', 404);
-            }
-        } catch (axiosErr) {
-            /*
-             * Error Propagation Strategy:
-             * 1. Re-throw our own validation errors.
-             * 2. Map upstream 404s to a clear "User does not exist" message.
-             * 3. Catch generic network/server failures.
-             */
-            if (axiosErr instanceof CostException) {
-                throw axiosErr;
-            }
-            if (axiosErr.response && axiosErr.response.status === 404) {
-                throw new CostException('User does not exist', 404);
-            }
-            throw new CostException('Failed to validate user', 500);
-        }
-        /*
-         * Computed Pattern - Temporal Logic:
-         * Determine if the requested report is for a past month.
-         * Past months are immutable (costs won't change), allowing us
-         * to use the cache effectively.
+         * Past Month Detection:
+         * Calculates if the requested report is strictly in the past.
+         * This determines if we can use the cached report or must calculate fresh data.
          */
         const now = new Date();
         const currentYear = now.getFullYear();
         const currentMonth = now.getMonth() + 1;
+
         const isPast = (year < currentYear) || (year === currentYear && month < currentMonth);
         /*
-         * Cache Lookup (Read Path):
-         * If the report is historical, check the 'reports' collection first.
-         * If found, return the pre-computed JSON immediately to save resources.
+         * Cache Lookup (Computed Pattern):
+         * If it's a past month, try to find a pre-computed report.
+         * If found, return it immediately to save processing power.
          */
         if (isPast) {
             const cached = await Report.findOne({ userid: userid, year, month }).lean();
@@ -345,9 +298,9 @@ app.get('/api/report', async (req, res) => {
             }
         }
         /*
-         * Dynamic Data Aggregation:
-         * If not in cache (or if it's the current month), calculate from scratch.
-         * Define the time window: 1st of the requested month to 1st of next month.
+         * Report Calculation:
+         * Define the start and end dates for the database query.
+         * 'start' is the 1st of the month, 'end' is the 1st of the NEXT month.
          */
         const start = new Date(year, month - 1, 1);
         const end = new Date(year, month, 1);
@@ -357,9 +310,9 @@ app.get('/api/report', async (req, res) => {
             createdAt: { $gte: start, $lt: end }
         }).lean();
         /*
-         * Category Normalization:
-         * Ensure specific 'FIXED' categories always appear in the report.
-         * Merge them with any dynamic categories found in the retrieved documents.
+         * Category Management:
+         * Merges hardcoded fixed categories with any dynamic categories
+         * found in the retrieved documents to ensure complete coverage.
          */
         const FIXED_CATEGORIES = ['food', 'health', 'housing', 'sports', 'education'];
         const dynamicCategories = [...new Set(costsDocs.map(c => c.category))];
@@ -369,17 +322,21 @@ app.get('/api/report', async (req, res) => {
             ...dynamicCategories.filter(c => !FIXED_CATEGORIES.includes(c))
         ];
         /*
-         * Data Structuring:
-         * Initialize buckets for each category and distribute the cost items.
-         * This transforms the flat database rows into the hierarchical API format.
+         * Grouping Initialization:
+         * Creates an empty array for every category to prepare for
+         * sorting the cost items.
          */
         const grouped = {};
         categories.forEach(cat => {
             grouped[cat] = [];
         });
-
+        /*
+         * Data Transformation:
+         * Iterates over raw cost documents and pushes simplified objects
+         * (sum, description, day) into their respective category buckets.
+         */
         costsDocs.forEach(c => {
-            if (!grouped[c.category]) grouped[c.category] = [];
+            if (!grouped[c.category]) grouped[c.category] = [];  // Safety check
             grouped[c.category].push({
                 sum: c.sum,
                 description: c.description,
@@ -387,8 +344,8 @@ app.get('/api/report', async (req, res) => {
             });
         });
         /*
-         * Final Output Formatting:
-         * Convert the grouped object into the required array structure.
+         * Final Formatting:
+         * Maps the grouped object into the array structure required by the API spec.
          */
         const costsArr = categories.map(cat => ({
             [cat]: grouped[cat]
@@ -401,9 +358,9 @@ app.get('/api/report', async (req, res) => {
             costs: costsArr
         };
         /*
-         * Cache Update (Write Path):
-         * If this was a past month (and wasn't cached yet), save the result.
-         * The 'upsert' option ensures we either create or update the record.
+         * Cache Update (Computed Pattern):
+         * If this was a past month (and wasn't in cache initially),
+         * save the calculated report to the DB for future requests.
          */
         if (isPast) {
             await Report.updateOne(
@@ -413,19 +370,7 @@ app.get('/api/report', async (req, res) => {
             );
         }
         return res.json(reportJson);
-
     } catch (err) {
-        /*
-         * Global Error Handler:
-         * Return structured JSON errors for known exceptions (400/404).
-         * Fallback to 500 for unexpected runtime errors.
-         */
-        if (err instanceof CostException) {
-            return res.status(err.id).json({
-                id: err.id,
-                message: err.message
-            });
-        }
         return res.status(500).json({ id: 2, message: err.message });
     }
 });
@@ -437,57 +382,35 @@ app.get('/api/report', async (req, res) => {
  */
 app.get('/api/total', async (req, res) => {
     try {
-        /*
-         * Input Parsing & Validation:
-         * We accept either 'userid' or 'id' as query parameters for flexibility.
-         * A strict numeric check is performed to prevent injection attacks or logical errors.
-         */
         const userid = Number(req.query.userid ?? req.query.id);
 
         if (Number.isNaN(userid)) {
-            throw new CostException('invalid userid', 400);
+            return res.status(400).json({ id: 400, message: 'Invalid userid' });
         }
         /*
          * MongoDB Aggregation Pipeline:
-         * 1. $match: Filter documents to include only those belonging to the requested user.
-         * 2. $group: Aggregate all matching documents into a single result, summing the 'sum' field.
-         * This method is more performance-efficient than fetching all docs and looping in JS.
+         * 1. Match documents by userid.
+         * 2. Group all matching docs and sum their 'sum' field.
          */
         const result = await Cost.aggregate([
             { $match: { userid } },
             { $group: { _id: null, total: { $sum: '$sum' } } }
         ]);
-        /*
-         * Result Extraction:
-         * The aggregation returns an array. If the user has no costs (or doesn't exist),
-         * the array will be empty. We default to 0 to ensure a valid numeric response.
-         */
-        const total = result.length ? result[0].total : 0;
-        return res.json({ userid, total });
 
+        const total = result.length ? result[0].total : 0;
+
+        // Return the total along with userid for context.
+        return res.json({ userid, total });
     } catch (err) {
-        /*
-         * Exception Handling:
-         * Standardized error response structure.
-         * Custom CostExceptions return specific client codes (400),
-         * while unexpected runtime errors return a generic 500.
-         */
-        if (err instanceof CostException) {
-            return res.status(err.id).json({
-                id: err.id,
-                message: err.message
-            });
-        }
         return res.status(500).json({ id: 2, message: err.message });
     }
 });
 /*
- * Server Initialization:
- * Configure the listening port (defaulting to 3001) and start the HTTP server.
- * The console log serves as a readiness probe for the developer or log aggregators.
+ * Server Startup:
+ * Listens on the configured PORT (default 3001).
+ * Logs a message when the server is ready.
  */
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
     console.log(`Costs service running on port ${PORT}`);
 });
-

@@ -68,10 +68,9 @@ app.get('/api/about', async (req, res) => {
 
     } catch (err) {
         /*
-         * Error Handling Strategy:
-         * Unlike complex services (e.g., Costs), explicit exception throwing is omitted here.
-         * A standard catch block is sufficient to handle unexpected runtime errors without
-         * the complexity of custom exception classes.
+         * Error Handling:
+         * Even though hardcoded data rarely fails, we keep a try-catch
+         * block for good practice and unforeseen server errors.
          */
         await writeLog('GET', '/api/about', 500);
         res.status(500).json({ id: 1, message: err.message });

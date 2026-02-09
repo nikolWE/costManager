@@ -72,10 +72,9 @@ app.post('/api/logs', async (req, res) => {
     try {
         const { service, method, endpoint, status, message } = req.body;
         /*
-         * Architectural Note:
-         * Currently, this query retrieves all documents without pagination.
-         * While sufficient for this project's scope, a production-grade implementation
-         * would utilize cursor-based pagination (limit/skip) to handle large datasets efficiently.
+         * Validation Logic:
+         * Ensure critical fields (method, endpoint, status) are present.
+         * Returns 400 Bad Request if data is incomplete.
          */
         if (!service || !method || !endpoint || !status) {
             return res.status(400).json({
@@ -99,10 +98,10 @@ app.post('/api/logs', async (req, res) => {
         res.status(201).json(log);
 
     }
-    /*
-     * Error Handling:
-     * Catch unexpected errors and return a 500 status with the error message.
-     */
+        /*
+         * Error Handling:
+         * Catch unexpected errors and return a 500 status with the error message.
+         */
     catch (err) {
         res.status(500).json({
             id: 1,

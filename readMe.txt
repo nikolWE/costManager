@@ -1,2 +1,6 @@
-PORT=3000
-MONGODB_URI=mongodb+srv://cost_manager_user:95Rklxab0g7cm58p@nikolneomiadam.4ibk5b8.mongodb.net/cost_manager?appName=NikolNeomiAdam
+The main purpose of this project is to build the backend infrastructure for a Cost Manager application using a microservices architecture. Developed with Express.js and MongoDB, and deployed on Render, the system exposes a set of RESTful Web Services divided across four independent processes that handle user management, expense tracking, system logging, and administrative details.
+
+Functions:
+Adding Cost Items-
+https://users-service-l21v.onrender.com/api/add
+

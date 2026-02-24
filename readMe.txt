@@ -5,10 +5,10 @@ Adding User-
 Adding a user by entering id, first and last name, and birthday. The birthday can not be a date in the future.
 https://users-service-l21v.onrender.com/api/add
 {
-id: ______,
-first name: "______",
-last name: "______",
-birthday: YYYY-MM-DD
+"id": ______,
+"first_name": "______",
+"last_name": "______",
+"birthday": "YYYY-MM-DD"
 }
 
 Getting The Details of a Specific User-
@@ -27,11 +27,11 @@ Adding Cost Items-
 Adding cost item by entering user's id, sum of the cost, category (for example food, electronics, sports, etc.), description (for example coffee, phone, baseball bat, etc.), and the date that the cost was created. Sum also accepts decimal numbers. If nothing is entered in the createdAt field today's date is going to be assigned. 
 https://costs-service-aw7k.onrender.com/api/add
 {
-  userid:_____,
-  sum:_____,
-  category: "______",
-  description: "______",
-  createdAt: YYYY-MM-DD
+  "userid":_____,
+  "sum":_____,
+  "category": "______",
+  "description": "______",
+  "createdAt": YYYY-MM-DD
 }
 
 Getting Monthly Report-

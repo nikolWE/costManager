@@ -25,7 +25,13 @@ https://admin-service-c1oo.onrender.com/api/about
 
 Adding Cost Items-
 Adding cost item by entering 
-
+{
+  userid,
+            sum,
+            category,
+            description,
+            createdAt,
+}
 
 Getting Monthly Report-
 

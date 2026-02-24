@@ -6,8 +6,8 @@ Adding a user by entering id, first and last name, and birthday. The birthday ca
 https://users-service-l21v.onrender.com/api/add
 {
 id: ______,
-first name: ______,
-last name: ______,
+first name: "______",
+last name: "______",
 birthday: YYYY-MM-DD
 }
 
@@ -29,8 +29,8 @@ https://costs-service-aw7k.onrender.com/api/add
 {
   userid:_____,
   sum:_____,
-  category: ______,
-  description: ______,
+  category: "______",
+  description: "______",
   createdAt: YYYY-MM-DD
 }
 

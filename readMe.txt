@@ -12,8 +12,8 @@ birthday: YYYY-MM-DD
 }
 
 Getting The Details of a Specific User-
-By entering the user's id in the api request.
-https://users-service-l21v.onrender.com/api/users/0000
+Retruns a JSON document with user's id, first and last name and the total of costs for this user.
+https://users-service-l21v.onrender.com/api/users/______
 
 List of Users-
 Retruns a JSON document with list of the users. The user's id is id:, and the _id: is the id from mongoDB.
@@ -35,8 +35,8 @@ https://costs-service-aw7k.onrender.com/api/add
 }
 
 Getting Monthly Report-
-Retruns a JSON document with list of all the costs for a specific user in a specific month and year.  
-https://costs-service-aw7k.onrender.com/api/report/
+Retruns a JSON document with list of all the costs arranged by category, for a specific user in a specific month and year.
+https://costs-service-aw7k.onrender.com/api/report?userid=______&year=YYYY&month=MM
 
 List of Logs-
 Retruns a JSON document with list of all the requests that were sent to each of the servers. 
